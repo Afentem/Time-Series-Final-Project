@@ -22,6 +22,8 @@ Halloween begins a candy consumption frenzy in the USA that continues into the C
   3 - Exponential Smoothing Models: SES, Holt, Holt Winters, ETS 
   
   4 - Seasonal ARIMA
+  
+  5 - Evaluation
 
 Dataset can be found here: https://www.kaggle.com/datasets/rtatman/us-candy-production-by-month
 
