@@ -1,0 +1,268 @@
+---
+title: "TS Final Project"
+author: "Ashlyn Fentem"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r include = FALSE}
+library(readr)
+library(TSA)
+library(tibble)
+library('ggfortify')
+library('data.table')
+library('ggplot2')
+library('forecast')
+library('tseries')
+library('urca')
+library('dplyr')
+library('TSstudio')
+library("xts")
+library(knitr)
+library(dplyr)
+library(knitr)
+```
+
+# 1 - Exploratory Data Analysis: Trend, Seasonality and Autocorrelation
+
+```{r}
+df<- read_csv("candy_production.csv")
+colnames(df)<-c("date", "production")
+df$date<-as.Date(df$date, format="%Y-%m-%d")
+CandyXTS<- xts(df[-1], df[[1]])
+CandyTS <- ts(df$production, start=c(1972,1),end=c(2017,8), frequency=12 )
+ts_plot(CandyXTS, title="Candy Production Time Series")
+```
+
+
+**Trend**
+```{r}
+ts_decompose(CandyTS)
+```
+I can see that the trend of the series is fairly flat up until roughly 1983 and then consistently increases up until about 2006. After this, the candy production trend declines a bit and this decline coincides with the 2008 recession, where it would make sense that output would decrease. The trend plot is clearly not linear. 
+
+I can also tell that there is strong seasonal pattern. In the next section I will look at seasonality more in depth. 
+
+**Seasonality**
+```{r}
+ts_seasonal(CandyTS, type = "all")
+```
+The first plot shows the full frequency cycle of the series, which in this case with monthly series is a full year. The plot’s color scale set by the chronological order of the lines (i.e., from dark color for early years and bright colors for the latest years). From this I can see a yearly seasonal trend, where candy production ramps up in October - December.   
+
+The second plot shows each frequency unit over time, and in this case, each line represents a month of consumption over time. It looks as though the seasonal pattern remains the same over time, but overall production has increased over the years.   
+
+The last plot is box-plot representative of each frequency unit, which allows us to compare the distribution of each frequency unit. Similar to the plots above, I can see that production increases in the final months of the year.   
+
+Next I want to use a periodogram to quantitatively evalate seasonality. 
+
+```{r}
+p <- periodogram(CandyTS)
+max_freq <- p$freq[which.max(p$spec)]
+seasonality <- 1/max_freq
+seasonality
+```
+There seems to be two major spikes. Looking at the tallest spike, the seasonality comes out to 576. Since the time series data is monthly, 576 units (or months) would be equivalent to 48 years. I also only have a total of 548 data points so I do not believe 576 is capturing an accurate seasonal pattern.   
+
+I will look at the second largest spike in the periodogram and see what it suggests.
+
+```{r}
+# Identify the indices of the two largest spectral densities
+largest_indices <- order(p$spec, decreasing = TRUE)[1:2]
+
+# Retrieve the corresponding frequencies
+largest_freqs <- p$freq[largest_indices]
+
+# Select the second largest frequency
+second_max_freq <- largest_freqs[2]
+
+# Estimate the seasonality based on the second maximum frequency
+seasonality_2 <- 1/second_max_freq
+
+# Print the seasonality
+seasonality_2
+```
+
+For this, the seasonality is 12, which would suggest yearly patterns. This also supports the plots from the decomposition plot and the seasonality plots. 
+
+**Autocorrelation**
+```{r}
+Acf(CandyTS)
+```
+
+The ACF plot depicted above exhibits signs of non-stationarity, as the lines cross the dashed lines, indicating a noticeable correlation that deviates significantly from zero. Furthermore, I know there is seasonality in this time series, indicating a degree of time-dependence and consequently establishing its non-stationary nature due to the existence of autocorrelation.
+
+# 2 - Simple models: Average, Naive, Seasonal Naive
+
+```{r}
+train<-window(CandyTS, start=c(1972,1), end=c(2009,12))
+test<-window(CandyTS, start=c(2010,1))
+```
+
+**Average: forecast will be equal to the average of past data**
+```{r}
+m_mean<-meanf(train, h=92)
+accuracy(m_mean, test)
+```
+
+**Naive: forecast will be equal to the last observation**
+```{r}
+m_naive<-naive(train, h=92)
+accuracy(m_naive, test)
+```
+
+**Seasonal Naive: forecast will be equal to the last observation of same season**
+```{r}
+m_snaive<-snaive(train, h=92)
+accuracy(m_snaive, test)
+```
+
+**Plots**
+
+```{r}
+autoplot(train)+
+autolayer(m_mean, series="Mean", PI=FALSE)+
+autolayer(m_naive, series="Naive", PI=FALSE)+
+autolayer(m_snaive, series="Seasonal Naive", PI=FALSE)+
+xlab('Year')+ylab('Candy Production')+
+ggtitle('Forecasts for Candy Production')+
+guides(colour=guide_legend(title='Forecast'))
+```
+
+When evaluated against the test set, the mean method has better RMSE and MAPE values.
+
+# 3 - Exponential Smoothing Models: SES, Holt, Holt Winters, ETS
+
+**Simple exponential: smoothing for level **
+
+```{r}
+m_ses<-ses(train, h=92)
+accuracy(m_ses, test)
+```
+**Holt: smoothing for level and for trend**
+    
+```{r}
+m_holt<-holt(train, h=92)
+accuracy(m_holt, test)
+```
+
+**Holt Winters: smoothing for level, trend and seasonality**
+```{r}
+m_holtw<-hw(train, seasonal="additive", h=92)
+accuracy(m_holtw, test)
+```
+
+**ETS: Allows other combinations of trend and seasonal components**  
+
+Error, Trend, Seasonality  
+A= additive, M= multiplicative, N= none
+
+```{r}
+m_ets<-forecast(ets(train), h=92)
+summary(m_ets)
+accuracy(m_ets, test)
+```
+
+
+```{r}
+autoplot(train)+
+autolayer(m_ses, series="Simple Exponential", PI=FALSE)+
+autolayer(m_holt, series="Holt Method", PI=FALSE)+
+autolayer(m_holtw, series="Holt_Winters", PI=FALSE)+
+autolayer(m_ets, series="ETS", PI=FALSE)+
+xlab('Month/Year')+ylab('Candy Production')+
+ggtitle('Forecasts for Candy Production')+
+guides(colour=guide_legend(title='Forecast'))
+```
+
+When evaluated against the test set, the Holt-Winters has better RMSE and MAPE values.
+
+# 4 - ARIMA
+
+```{r}
+autoarima <- auto.arima(train, allowdrift=F)
+autoarima
+```
+```{r}
+arima=Arima(train, order=c(4,1,1),
+           seasonal=list(order=c(2,1,2), period=12))
+arima
+arima_f =forecast(arima, h=92)
+checkresiduals(arima)
+```
+
+Since the p-value of the Ljung-Box test is 0.005218, we have sufficient evidence to reject the null hypothesis and conclude that autocorrelation is present.
+
+```{r}
+residuals <- residuals(arima)
+Acf(residuals)
+p_resid <- periodogram(residuals)
+```
+
+The values in the ACF plot are mostly within the dashed thresholds, and the periodogram shows all frequency levels present so it seems like the residuals are mostly white noise.
+
+```{r}
+accuracy(arima_f, test)
+```
+
+```{r}
+autoplot(train)+
+autolayer(arima_f, series="ARIMA", PI=FALSE)+
+xlab('Month/Year')+ylab('Candy Production')+
+ggtitle('Forecasts for Candy Production')+
+guides(colour=guide_legend(title='Forecast'))
+
+```
+
+**Model Comparisons**
+```{r}
+library(tibble)
+
+# Create forecasts for each model
+forecasts <- list(
+  Mean = m_mean,
+  Naive = m_naive,
+  Seasonal_Naive = m_snaive,
+  ETS = m_ets,
+  Holt = m_holt,
+  Holt_Winters = m_holtw,
+  Simple_Exponential = m_ses,
+  ARIMA = arima_f
+)
+
+# Calculate RMSE for each forecast
+rmse_values <- sapply(forecasts, function(forecast) {
+  accuracy_values <- accuracy(forecast, test)
+  rmse <- accuracy_values[2, "RMSE"]
+  return(rmse)
+})
+
+# Create a table of RMSE values
+model_names <- names(forecasts)
+rmse_table <- tibble(Model = model_names, RMSE = rmse_values)
+
+# Sort the table by RMSE in ascending order
+rmse_table <- rmse_table[order(rmse_table$RMSE), ]
+
+# Calculate MAPE for each forecast
+mape_values <- sapply(forecasts, function(forecast) {
+  accuracy_values <- accuracy(forecast, test)
+  mape <- accuracy_values[2, "MAPE"]
+  return(mape)
+})
+
+# Create a table of MAPE values
+model_names <- names(forecasts)
+mape_table <- tibble(Model = model_names, MAPE = mape_values)
+
+# Sort the table by MAPE in ascending order
+mape_table <- mape_table[order(mape_table$MAPE), ]
+
+# Combine RMSE and MAPE tables
+combined_table <- left_join(rmse_table, mape_table, by = "Model")
+
+# Format the combined table using kable
+kable(combined_table, align = c("l", "r", "r"), caption = "RMSE and MAPE values for each forecast model")
+```
+
+After Seasonal ARIMA, the best RMSE and MAPE was found with the Holt-Winters method. 
+For future analysis, may be a good option to work with ensemble methods to combine the predictions of multiple models. 
