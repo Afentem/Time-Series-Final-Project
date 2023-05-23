@@ -1,4 +1,5 @@
 # Time-Series-Final-Project
+## Forecasting Candy Production
 Time Series Analysis and Forecasting - Spring 2023 - Ashlyn Fentem
 
 **Problem statement:**
