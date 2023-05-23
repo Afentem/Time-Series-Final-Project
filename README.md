@@ -1,7 +1,5 @@
 # Time-Series-Final-Project
-Time Series Analysis and Forecasting
-Spring 2023
-Ashlyn Fentem
+Time Series Analysis and Forecasting - Spring 2023 - Ashlyn Fentem
 
 **Problem statement:**
 
